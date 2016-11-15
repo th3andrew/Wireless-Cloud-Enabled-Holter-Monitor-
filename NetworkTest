@@ -1,0 +1,142 @@
+
+#include <stdio.h>
+#include <signal.h>
+#include "iotfclient.h"
+//#include <mraa.h>
+//#include <mraa/gpio.h>
+
+volatile int interrupt = 0;
+
+// Handle signal interrupt
+void sigHandler(int signo) 
+{
+	printf("SigINT received.\n");
+	interrupt = 1;
+}
+
+void myCallback (char* commandName, char* format, void* payload)
+{
+	printf("------------------------------------\n" );
+	printf("The command received :: %s\n", commandName);
+	printf("format : %s\n", format);
+	printf("Payload is : %s\n", (char *)payload);
+
+	printf("------------------------------------\n" );
+}
+
+int main(int argc, char const *argv[])
+{
+	int rc = -1;
+	int i = 0;
+	int a = 0;
+	int len = 0;
+	int value[3] = {5,10,15};
+	
+	char *sopen = "{\"d\":{"; 
+	char *sclose = "}}\"";
+	char *ssep = "\":";
+	char *scom = ",";
+	char *sname = "\"temp";
+	char *sloop;
+	char *stemp;
+	char *sinternal;
+	char *sfinal;
+	
+	//printf ("\n%s%d%s\n", s1,a,s2);
+	//sprintf(sf, "%s%d%s%d%s", s1,i,s2,a,s3);
+	//printf ("\nFinal JSON:%s\n", sf);
+
+	Iotfclient client;
+	
+	//mraa_init();
+	//mraa_aio_context m_aio;
+	//m_aio = mraa_aio_init(0);
+
+	//catch interrupt signal
+	signal(SIGINT, sigHandler);
+	signal(SIGTERM, sigHandler);
+
+	char *configFilePath = "./device.cfg";
+
+	rc = initialize_configfile(&client, configFilePath);
+
+	if(rc != SUCCESS)
+	{
+		printf("initialize failed and returned rc = %d.\n Quitting..", rc);
+		return 0;
+	}
+
+	rc = connectiotf(&client);
+
+	if(rc != SUCCESS)
+	{
+		printf("Connection failed and returned rc = %d.\n Quitting..", rc);
+		return 0;
+	}
+
+	setCommandHandler(&client, myCallback);
+
+	while(!interrupt)
+	{
+	
+		for (i=0; i<3; i++) 	
+		{
+			//Comma seperate JSON Objects 
+			//Prevents comma at start or end
+			if (i > 0)
+			{
+				strncat (stemp, scom, 5);
+			}
+			
+			printf ("\n\tBegin Loop");
+			
+			//stemp = malloc(strlen(sname) + strlen(ssep) + strlen(scom) + 5);
+			//len = strlen(stemp);
+			//printf ("\nLength of stemp:%d", len);
+			
+			sprintf(stemp, "%s%d%s%d", sname,i,ssep,value[i]);
+			printf ("\nTemp JSON:%s", stemp);
+			
+			strncat (sinternal, stemp, 100);
+			printf ("\nInternal JSON:%s", sinternal);
+			
+			printf ("\n\tEndLoop\n");
+			len = 0;
+		}
+		
+		/*Example of Correct JSON - For comparison to 'sfinal'
+		*
+		*	char *data = "{\"d\":{\"temp1\":11,\"temp2\":22,\"temp3\":33}}";
+		*
+		*/
+		
+		//sprintf(sfinal, "%s%s%s", sopen, sinternal, sclose);
+		
+		sprintf(sinternal, "%s%d%s%d", sname,0,ssep,value[0]);
+		sprintf(sfinal, "%s%s%s", sopen, sinternal, sclose);
+		printf ("\nFinal JSON:%s\n", sfinal);
+		
+		printf("Publishing: ");
+		rc = publishEvent(&client, "status","json", sfinal, QOS0);
+		printf("%d \n", rc);
+		yield(&client, 1000);
+		sleep(5);
+	
+	}
+
+	printf("Quitting!!\n");
+
+	disconnect(&client);
+
+	return 0;
+}
+
+
+/* int main ()
+{
+  char buffer [50];
+  int n, a=5, b=3;
+  n=sprintf (buffer, "%d plus %d is %d", a, b, a+b);
+  printf ("[%s] is a string %d chars long\n",buffer,n);
+  return 0;
+} */
